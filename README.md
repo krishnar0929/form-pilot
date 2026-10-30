@@ -31,7 +31,7 @@ Open `test/review-form.html` in Chrome (enable "Allow access to file URLs" for t
 ## Testing with a saved key (temporary)
 To avoid pasting the key each time while testing:
 ```bash
-cp config.example.js config.local.js   # config.local.js is git-ignored
-# edit config.local.js and paste your key, then reload the extension
+./scripts/set-key.sh   # copy your key first, or paste it when asked (hidden)
 ```
+This writes the git-ignored `config.local.js`, checks the key, and opens `chrome://extensions` with the folder path on your clipboard. (Manual alternative: `cp config.example.js config.local.js` and edit it.)
 The key from `config.local.js` is used whenever no key is saved in Settings, and is copied into Chrome storage on first load. Remove the file before publishing.
