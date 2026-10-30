@@ -387,6 +387,14 @@ $('#scanBtn').onclick = async () => {
   } catch (e) { status(e.message, true); } finally { busy(false); }
 };
 $('#runBtn').onclick = run;
+$('#debugBtn').onclick = async () => {
+  try {
+    if (!scanData) await doScan();
+    const info = await sendToTab(scanData.tabId, { type: 'fp:debug' });
+    await navigator.clipboard.writeText(JSON.stringify(info, null, 1));
+    status(`Debug info for ${info.fields.length} field(s) copied — paste it to whoever is helping you.`);
+  } catch (e) { status(e.message, true); }
+};
 $('#fillBtn').onclick = fillSelected;
 $('#copyBtn').onclick = () => copyText().catch((e) => status(e.message, true));
 chrome.tabs.onActivated.addListener(() => { scanData = null; suggestions = null; $('#fields').replaceChildren(); $('#footer').classList.add('hidden'); $('#summaryBox').classList.add('hidden'); status(''); });

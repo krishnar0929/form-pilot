@@ -79,7 +79,34 @@
         <textarea name="c4" placeholder="Write Comment"></textarea>
       </div>
     </div>
+
+    <div class="row">
+      <div class="left">
+        <h4>Scalability &amp; Sustainability (plain-looking dropdown)</h4>
+        <p>Can the solution grow and be maintained after the pilot?</p>
+      </div>
+      <div class="right">
+        <div class="fld" style="position:relative">
+          <input class="fld-in" type="text" style="width:100%" />
+          <div class="pane" style="display:none;position:absolute;left:0;right:0;background:#fff;border:1px solid #ccc;z-index:5">
+            <div class="row-o">Minimal</div><div class="row-o">Limited</div><div class="row-o">Adequate</div><div class="row-o">Strong</div><div class="row-o">Exceeding</div>
+          </div>
+        </div>
+        <div class="muted">Your Rating</div>
+        <textarea name="c5" placeholder="Write Comment"></textarea>
+      </div>
+    </div>
   </div>
+  <script>
+    document.querySelectorAll('.fld').forEach(function (w) {
+      var input = w.querySelector('input'), pane = w.querySelector('.pane');
+      input.addEventListener('focus', function () { pane.style.display = 'block'; });
+      input.addEventListener('blur', function () { setTimeout(function(){ pane.style.display = 'none'; }, 100); });
+      pane.querySelectorAll('.row-o').forEach(function (o) {
+        o.addEventListener('mousedown', function (e) { e.preventDefault(); input.value = o.textContent; pane.style.display = 'none'; });
+      });
+    });
+  </script>
   <script>
     document.querySelectorAll('.vselect').forEach(function (w) {
       var input = w.querySelector('input'), menu = w.querySelector('ul');

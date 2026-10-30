@@ -1,8 +1,11 @@
 // FormPilot content script: scans form fields on the page and fills approved values.
 // Injected on demand from the side panel. Never submits anything.
 (() => {
-  if (window.__formPilotLoaded) return;
-  window.__formPilotLoaded = true;
+  // Version-aware guard: after the extension is updated, a stale copy can linger in the tab's
+  // isolated world. Let a newer version take over instead of bailing out.
+  const VERSION = chrome.runtime.getManifest().version;
+  if (window.__formPilotLoaded === VERSION) return;
+  window.__formPilotLoaded = VERSION;
 
   const FIELD_SEL = 'input, select, textarea, [contenteditable="true"], [contenteditable=""], ' +
     '[role="combobox"]:not(input), button[aria-haspopup="listbox"]';
@@ -259,6 +262,19 @@
       if (kind === 'radio' && el.name) radios.set(el.name, f);
     }
 
+    // Plain-looking text boxes can still be pick-lists: click each empty short one and see if a list pops up.
+    for (const f of fields.filter((x) => x.kind === 'text' && ['text', 'search'].includes(x.inputType) && !x._els[0].value).slice(0, 30)) {
+      try {
+        const opts = await openWidget(f._els[0]);
+        if (opts.length >= 2) {
+          f.kind = 'combo';
+          delete f.inputType;
+          f.options = opts.map((o) => ({ value: clean(o.innerText), text: clean(o.innerText) }));
+        }
+        await closeWidget(f._els[0]);
+      } catch (e) { /* ignore */ }
+    }
+
     // Read the options of custom dropdowns by briefly opening them.
     for (const f of fields.filter((x) => x.kind === 'combo' && !x.options.length).slice(0, 30)) {
       try {
@@ -423,6 +439,20 @@
     if (msg.type === 'fp:scan') { reply(scan()); return true; }
     if (msg.type === 'fp:fill') { reply(fill(msg.values || [])); return true; }
     if (msg.type === 'fp:focus') { focusField(msg.id); sendResponse({ ok: true }); }
+    if (msg.type === 'fp:debug') {
+      const out = { version: VERSION, url: location.href, fields: [] };
+      registry.forEach((f) => {
+        const el = f._els[0];
+        let box = el;
+        for (let i = 0; i < 3 && box.parentElement; i++) box = box.parentElement;
+        out.fields.push({
+          id: f.id, kind: f.kind, tag: el.tagName, type: el.type || '', role: el.getAttribute('role') || '',
+          readOnly: !!el.readOnly, visible: isVisible(el), options: (f.options || []).length,
+          html: box.outerHTML.replace(/\s+/g, ' ').slice(0, 1500),
+        });
+      });
+      sendResponse({ ok: true, data: out });
+    }
     return false;
   });
 })();
