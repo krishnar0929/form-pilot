@@ -101,14 +101,21 @@ async function sendToTab(tabId, msg) {
 }
 
 // ---------- settings ----------
+// Optional local config for testing (config.local.js, git-ignored). Defaults only — saved settings win.
+const LOCAL = window.FORMPILOT_CONFIG || {};
+if (/PASTE/.test(LOCAL.apiKey || '')) delete LOCAL.apiKey; // placeholder not replaced yet
+
 async function loadSettings() {
   const s = await chrome.storage.local.get(['apiKey', 'model', 'profile', 'screenshot', 'mode']);
-  $('#apiKey').value = s.apiKey || '';
-  $('#model').value = s.model || DEFAULT_MODEL;
-  $('#profile').value = s.profile || '';
+  const apiKey = s.apiKey || LOCAL.apiKey || '';
+  $('#apiKey').value = apiKey;
+  $('#model').value = s.model || LOCAL.model || DEFAULT_MODEL;
+  $('#profile').value = s.profile || LOCAL.profile || '';
   $('#screenshot').checked = s.screenshot !== false;
-  setMode(s.mode || 'fill');
-  if (!s.apiKey) $('#settings').open = true;
+  setMode(s.mode || LOCAL.mode || 'fill');
+  // Persist the local key so it survives even if the config file is removed later.
+  if (!s.apiKey && LOCAL.apiKey) saveSettings();
+  $('#settings').open = !apiKey;
 }
 function saveSettings() {
   chrome.storage.local.set({

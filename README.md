@@ -27,3 +27,11 @@ Open `test/review-form.html` in Chrome (enable "Allow access to file URLs" for t
 - Fields inside iframes aren't scanned yet. Chrome pages and the Web Store can't be scripted.
 - When a modal/dialog is open, only its fields are scanned; the whole page text is still sent as context.
 - Many judging programs expect the reviewer's own assessment — use AI scores as a draft and follow the program's rules.
+
+## Testing with a saved key (temporary)
+To avoid pasting the key each time while testing:
+```bash
+cp config.example.js config.local.js   # config.local.js is git-ignored
+# edit config.local.js and paste your key, then reload the extension
+```
+The key from `config.local.js` is used whenever no key is saved in Settings, and is copied into Chrome storage on first load. Remove the file before publishing.
