@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "FormPilot – AI Form Filler & Reviewer",
   "short_name": "FormPilot",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Reads the form on any page and uses Claude to fill, judge, or check it. You approve every value before it goes in.",
   "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs"],
   "host_permissions": ["<all_urls>"],

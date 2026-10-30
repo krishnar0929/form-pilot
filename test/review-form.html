@@ -96,7 +96,41 @@
         <textarea name="c5" placeholder="Write Comment"></textarea>
       </div>
     </div>
+
+    <div class="row">
+      <div class="left">
+        <h4>Innovation &amp; Novelty (tag-style dropdown)</h4>
+        <p>How new is the approach compared with existing tools?</p>
+      </div>
+      <div class="right">
+        <div class="tagsel" style="position:relative;border:1px solid #ccc;min-height:30px;padding:3px;cursor:pointer">
+          <input class="tag-backing" type="text" value="1" style="position:absolute;width:1px;height:1px;opacity:.01;left:0;top:0" />
+          <span class="chips"></span>
+          <ul class="tag-menu" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #ccc;list-style:none;margin:0;padding:0;z-index:5"></ul>
+        </div>
+        <div class="muted">Your Rating</div>
+        <textarea name="c6" placeholder="Write Comment"></textarea>
+      </div>
+    </div>
   </div>
+  <script>
+    (function () {
+      var OPTS = [['1','Minimal'],['2','Limited'],['3','Adequate'],['5','Strong'],['4','Exceeding']]; // ids out of order
+      document.querySelectorAll('.tagsel').forEach(function (w) {
+        var input = w.querySelector('input'), chips = w.querySelector('.chips'), menu = w.querySelector('ul');
+        function label(id){ return (OPTS.find(function(o){return o[0]===id;})||[,''])[1]; }
+        function render() {
+          chips.innerHTML = input.value ? '<span class="chip">' + label(input.value) + ' <b class="select2-selection__choice__remove">×</b></span>' : '';
+          var rm = chips.querySelector('b'); if (rm) rm.addEventListener('mousedown', function (e) { e.stopPropagation(); input.value = ''; render(); });
+          menu.innerHTML = OPTS.filter(function(o){return o[0]!==input.value;}).map(function(o){return '<li data-id="'+o[0]+'">'+o[1]+'</li>';}).join('');
+          menu.querySelectorAll('li').forEach(function (li) { li.addEventListener('mousedown', function (e) { e.stopPropagation(); input.value = li.dataset.id; menu.style.display='none'; render(); }); });
+        }
+        w.addEventListener('click', function (e) { if (e.target.tagName !== 'B') menu.style.display = menu.style.display === 'none' ? 'block' : 'none'; });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') menu.style.display = 'none'; });
+        render();
+      });
+    })();
+  </script>
   <script>
     document.querySelectorAll('.fld').forEach(function (w) {
       var input = w.querySelector('input'), pane = w.querySelector('.pane');

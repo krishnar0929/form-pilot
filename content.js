@@ -102,7 +102,20 @@
   }
 
   // ---------- custom dropdown helpers ----------
+  function isTiny(el) {
+    const r = el.getBoundingClientRect();
+    return r.width < 8 || r.height < 8;
+  }
+
   function widgetOf(el) {
+    // Hidden/tiny backing input: the clickable box is the nearest real-sized ancestor.
+    if (isTiny(el) || !isVisible(el)) {
+      let a = el.parentElement;
+      for (let i = 0; i < 6 && a; i++, a = a.parentElement) {
+        const r = a.getBoundingClientRect();
+        if (isVisible(a) && r.width >= 60 && r.height >= 18) return a;
+      }
+    }
     // The visible box the user clicks (input itself, or its styled wrapper).
     let n = el;
     for (let i = 0; i < 3 && n.parentElement; i++) {
@@ -187,8 +200,19 @@
   }
 
   function comboDisplay(el) {
-    if (el.tagName === 'INPUT' && el.value) return clean(el.value);
-    return clean(widgetOf(el).innerText).slice(0, 120);
+    if (el.tagName === 'INPUT' && el.value && !isTiny(el) && isVisible(el) && !el.readOnly) return clean(el.value);
+    if (el.tagName === 'INPUT' && el.value && el.readOnly && !isTiny(el)) return clean(el.value);
+    return clean(widgetOf(el).innerText.replace(/[×✕✖]/g, ' ')).slice(0, 120);
+  }
+
+  // Remove buttons on already-selected chips/tags (so a single rating gets replaced, not added).
+  function chipRemovers(el) {
+    const w = widgetOf(el);
+    const sel = '[class*="remove"], [class*="clear"], [class*="times"], [class*="close"], ' +
+      '[aria-label*="remove" i], [title*="remove" i], [aria-label*="clear" i], [title*="clear" i], [aria-label*="delete" i]';
+    const byClass = [...w.querySelectorAll(sel)];
+    const byGlyph = [...w.querySelectorAll('*')].filter((e) => e.children.length === 0 && /^[×✕✖]$/.test(clean(e.textContent)));
+    return [...new Set([...byClass, ...byGlyph])].filter(isVisible);
   }
 
   // ---------- scan ----------
@@ -263,7 +287,7 @@
     }
 
     // Plain-looking text boxes can still be pick-lists: click each empty short one and see if a list pops up.
-    for (const f of fields.filter((x) => x.kind === 'text' && ['text', 'search'].includes(x.inputType) && !x._els[0].value).slice(0, 30)) {
+    for (const f of fields.filter((x) => x.kind === 'text' && ['text', 'search'].includes(x.inputType)).slice(0, 30)) {
       try {
         const opts = await openWidget(f._els[0]);
         if (opts.length >= 2) {
@@ -284,6 +308,15 @@
       } catch (e) { /* ignore */ }
       if (!f.options.length) { f.kind = 'text'; f.inputType = 'text'; } // free-text autocomplete
     }
+
+    const combosAll = fields.filter((x) => x.kind === 'combo' && x.options.length);
+    const fullest = combosAll.reduce((a, b) => (b.options.length > a.length ? b.options : a), []);
+    const fullSet = new Set(fullest.map((o) => o.text.toLowerCase()));
+    combosAll.forEach((x) => {
+      if (x.options.length < fullest.length && x.options.every((o) => fullSet.has(o.text.toLowerCase()))) {
+        x.options = fullest.map((o) => ({ ...o }));
+      }
+    });
 
     for (const f of fields) {
       if (f.kind === 'radio') f.options = f._els.map((r) => ({ value: r.value, text: radioLabel(r) }));
@@ -340,14 +373,23 @@
   async function fillCombo(f, value) {
     const el = f._els[0];
     const want = matchOption(f.options || [], value);
-    const wantText = want ? want.text : String(value);
+    if (!want) return `no option matches "${value}"`;
+    const wantText = want.text;
+    const lcWant = wantText.toLowerCase();
+    const shownNow = () => comboDisplay(el).toLowerCase();
+    if (shownNow() === lcWant) return null; // already set
+
+    // Single-choice tag widgets: remove the current chip before choosing a new one.
+    const removers = chipRemovers(el);
+    for (const r of removers) { realClick(r); await sleep(120); }
+
     const opts = await openWidget(el);
-    const pick = matchOption(opts.map((o, i) => ({ value: String(i), text: clean(o.innerText) })), wantText)
-      || matchOption(opts.map((o, i) => ({ value: String(i), text: clean(o.innerText) })), value);
-    if (pick) {
-      realClick(opts[Number(pick.value)]);
-      await sleep(150);
-      if (opts[Number(pick.value)].isConnected && isVisible(opts[Number(pick.value)])) await closeWidget(el);
+    const byText = (o) => clean(o.innerText).toLowerCase();
+    const target = opts.find((o) => byText(o) === lcWant) || opts.find((o) => byText(o).startsWith(lcWant));
+    if (target) {
+      realClick(target);
+      await sleep(180);
+      if (opts.some((o) => o.isConnected && isVisible(o))) await closeWidget(el);
     } else {
       await closeWidget(el);
     }
@@ -356,8 +398,12 @@
       const so = matchOption([...f._select.options].map((o) => ({ value: o.value, text: clean(o.text) })), wantText);
       if (so) setNativeValue(f._select, so.value);
     }
-    if (comboDisplay(el).toLowerCase().includes(wantText.toLowerCase())) return null;
-    if (pick || f._select) return null; // clicked the option / set the native select
+    const shown = shownNow();
+    if (shown.includes(lcWant)) {
+      const others = (f.options || []).filter((o) => o.text.toLowerCase() !== lcWant && shown.includes(o.text.toLowerCase()));
+      return others.length ? `set "${wantText}" but "${others[0].text}" is still selected — remove it on the page` : null;
+    }
+    if (target || f._select) return null;
     return `couldn't find "${wantText}" in the dropdown`;
   }
 
