@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Test – Review and Evaluate</title>
+<style>
+  body { font-family: sans-serif; margin: 0; background: #8aa0b8; }
+  .idea { padding: 20px; width: 380px; background: #fff; margin: 20px; }
+  .modal { position: fixed; inset: 30px 30px 30px 440px; background: #fff; overflow: auto; display: block; }
+  .modal-header { background: #2b5f99; color: #fff; padding: 14px 20px; font-weight: bold; }
+  .row { display: flex; gap: 30px; padding: 16px 30px; }
+  .left { flex: 1; } .right { flex: 1; }
+  select, textarea { width: 100%; }
+  .muted { color: #bbb; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="idea">
+    <h2>FloodSense Kogi</h2>
+    <p>AI-powered flood prediction and situational awareness platform for Kogi State, Nigeria. Combines IoT river sensors,
+      Sentinel-1 SAR satellite data, weather forecasts, and community reports via SMS/USSD. An LSTM model forecasts water
+      levels 6–72 hours ahead; alerts go to emergency responders through a GIS dashboard and to residents via SMS in local languages.
+      Offline-first design for low connectivity. Future: 3D digital twin.</p>
+  </div>
+
+  <div class="modal show" role="dialog" aria-modal="true">
+    <div class="modal-header">Review and Evaluate</div>
+    <p style="padding:0 30px">Please review this idea based on the following criteria. Each criterion is scored on a 1 (Minimal)–5 (Exceeding) scale.</p>
+
+    <div class="row">
+      <div class="left">
+        <h4>Timeliness, Real-Time Responsiveness &amp; Technical Reliability</h4>
+        <p>Evaluates how effectively a solution can acquire, process, and display disaster-related information in real or near-real time.</p>
+      </div>
+      <div class="right">
+        <select name="r1"><option value=""></option><option value="1">1 - Minimal</option><option value="2">2</option><option value="3">3 - Meets</option><option value="4">4</option><option value="5">5 - Exceeding</option></select>
+        <div class="muted">Your Rating</div>
+        <textarea name="c1" placeholder="Write Comment"></textarea>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="left">
+        <h4>Comprehensiveness, Use of Available Data &amp; Novel Data Discovery</h4>
+        <p>Assesses how well teams identify and use relevant data sources such as weather, satellite imagery, infrastructure status, or social media.</p>
+      </div>
+      <div class="right">
+        <select name="r2"><option value=""></option><option value="1">1 - Minimal</option><option value="2">2</option><option value="3">3 - Meets</option><option value="4">4</option><option value="5">5 - Exceeding</option></select>
+        <div class="muted">Your Rating</div>
+        <textarea name="c2" placeholder="Write Comment"></textarea>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="left">
+        <h4>Integration, Synthesis Quality &amp; Responsible Data Handling</h4>
+        <p>Determines how multiple data streams are combined into a coherent, actionable picture.</p>
+      </div>
+      <div class="right">
+        <select name="r3"><option value=""></option><option value="1">1 - Minimal</option><option value="2">2</option><option value="3">3 - Meets</option><option value="4">4</option><option value="5">5 - Exceeding</option></select>
+        <div class="muted">Your Rating</div>
+        <textarea name="c3" placeholder="Write Comment"></textarea>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
