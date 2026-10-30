@@ -4,24 +4,45 @@
   if (window.__formPilotLoaded) return;
   window.__formPilotLoaded = true;
 
-  const FIELD_SEL = 'input, select, textarea, [contenteditable="true"], [contenteditable=""]';
+  const FIELD_SEL = 'input, select, textarea, [contenteditable="true"], [contenteditable=""], ' +
+    '[role="combobox"]:not(input), button[aria-haspopup="listbox"]';
   const SKIP_TYPES = new Set(['hidden', 'submit', 'button', 'reset', 'image', 'file', 'password']);
+  const COMBO_CLASS = /(^|[\s_-])(select|dropdown|combo|chosen|choices|multiselect|picker)/i;
+  // Things that can be an option inside an opened custom dropdown.
+  const OPTION_SEL = '[role="option"], li, .option, .dropdown-item, [class*="option"], [class*="item"], a, span, div';
   const registry = new Map(); // id -> field (with _els)
 
   const clean = (t) => (t || '').replace(/\s+/g, ' ').trim();
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   function isVisible(el) {
     if (!el || !el.getBoundingClientRect) return false;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return false;
     const s = getComputedStyle(el);
-    return s.visibility !== 'hidden' && s.display !== 'none';
+    return s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0';
+  }
+
+  // A text-like control that actually behaves like a pick-list (custom dropdown widget).
+  function isComboLike(el) {
+    if (el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') return false;
+    if (el.tagName !== 'INPUT') return true; // role=combobox div / listbox button
+    const t = (el.type || 'text').toLowerCase();
+    if (!['text', 'search', ''].includes(t)) return false;
+    if (el.getAttribute('role') === 'combobox' || el.hasAttribute('aria-haspopup') ||
+        el.hasAttribute('aria-autocomplete') || el.hasAttribute('aria-expanded') || el.readOnly) return true;
+    let n = el;
+    for (let i = 0; i < 3 && n; i++, n = n.parentElement) {
+      if (COMBO_CLASS.test(n.className && typeof n.className === 'string' ? n.className : '')) return true;
+    }
+    return false;
   }
 
   function isCandidate(el) {
     const tag = el.tagName;
     if (tag === 'INPUT' && SKIP_TYPES.has((el.type || 'text').toLowerCase())) return false;
-    if (el.disabled || el.readOnly) return false;
+    if (el.disabled) return false;
+    if (el.readOnly && !isComboLike(el)) return false;
     if (el.closest('[data-formpilot-ignore]')) return false;
     if (isVisible(el)) return true;
     // Custom-styled selects / checkboxes often hide the native control.
@@ -50,13 +71,14 @@
     if (el.labels && el.labels.length) parts.push([...el.labels].map((l) => clean(l.innerText || l.textContent)).join(' '));
     if (el.placeholder) parts.push(el.placeholder);
     if (el.title) parts.push(el.title);
-    return clean(parts.filter(Boolean).join(' | ')).slice(0, 300);
+    const label = clean(parts.filter(Boolean).join(' | ')).slice(0, 300);
+    return /^[\[\]{}()\s|]*$/.test(label) ? '' : label; // drop junk like "[]"
   }
 
   const groupKey = (el) => (el.type === 'radio' && el.name ? 'radio:' + el.name : el);
 
   // Climb from the field to the largest ancestor that still belongs to "this question"
-  // (e.g. the row holding the criterion text, the rating select and its comment box).
+  // (e.g. the row holding the criterion text, the rating control and its comment box).
   function contextOf(el, candSet) {
     let node = el;
     for (let i = 0; i < 8; i++) {
@@ -76,6 +98,97 @@
     return clean(t).slice(0, 150);
   }
 
+  // ---------- custom dropdown helpers ----------
+  function widgetOf(el) {
+    // The visible box the user clicks (input itself, or its styled wrapper).
+    let n = el;
+    for (let i = 0; i < 3 && n.parentElement; i++) {
+      const p = n.parentElement;
+      if (COMBO_CLASS.test(typeof p.className === 'string' ? p.className : '') && isVisible(p)) return p;
+      n = p;
+    }
+    return isVisible(el) ? el : el.parentElement;
+  }
+
+  function nearbySelect(el) {
+    let n = el;
+    for (let i = 0; i < 4 && n; i++, n = n.parentElement) {
+      const s = n.querySelector && n.querySelector('select');
+      if (s && s.options.length > 1) return s;
+    }
+    return null;
+  }
+
+  function fire(el, type) {
+    const opts = { bubbles: true, cancelable: true, view: window };
+    const E = type.startsWith('pointer') ? PointerEvent : MouseEvent;
+    el.dispatchEvent(new E(type, opts));
+  }
+  function realClick(el) {
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach((t) => fire(el, t));
+  }
+
+  function visibleOptionCandidates() {
+    return new Set([...document.querySelectorAll(OPTION_SEL)].filter((e) => {
+      if (!isVisible(e)) return false;
+      const t = clean(e.innerText);
+      return t && t.length <= 80;
+    }));
+  }
+
+  // Leaf-most option-like elements that appeared after opening the widget.
+  function appearedOptions(before, anchor) {
+    const listbox = anchor.getAttribute('aria-controls') || anchor.getAttribute('aria-owns');
+    if (listbox && document.getElementById(listbox)) {
+      const lb = document.getElementById(listbox);
+      const opts = [...lb.querySelectorAll('[role="option"], li')].filter(isVisible);
+      if (opts.length) return opts;
+    }
+    const roleOpts = [...document.querySelectorAll('[role="option"]')].filter((e) => isVisible(e) && !before.has(e));
+    if (roleOpts.length) return roleOpts;
+    const fresh = [...visibleOptionCandidates()].filter((e) => !before.has(e));
+    // keep leaves: drop elements that contain another fresh element with the same text
+    const leaves = fresh.filter((e) => !fresh.some((o) => o !== e && e.contains(o) && clean(o.innerText) === clean(e.innerText)));
+    // keep the largest group of siblings (the actual list)
+    const groups = new Map();
+    leaves.forEach((e) => {
+      const k = e.parentElement;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(e);
+    });
+    let best = [];
+    groups.forEach((g) => { if (g.length > best.length) best = g; });
+    return best.length >= 2 ? best : [];
+  }
+
+  async function openWidget(el) {
+    const before = visibleOptionCandidates();
+    const w = widgetOf(el);
+    el.focus && el.focus();
+    realClick(w);
+    await sleep(180);
+    let opts = appearedOptions(before, el);
+    if (!opts.length && w !== el) { realClick(el); await sleep(180); opts = appearedOptions(before, el); }
+    if (!opts.length) {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true }));
+      await sleep(180);
+      opts = appearedOptions(before, el);
+    }
+    return opts;
+  }
+
+  async function closeWidget(el) {
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    el.blur && el.blur();
+    await sleep(60);
+  }
+
+  function comboDisplay(el) {
+    if (el.tagName === 'INPUT' && el.value) return clean(el.value);
+    return clean(widgetOf(el).innerText).slice(0, 120);
+  }
+
+  // ---------- scan ----------
   function currentValue(f) {
     const el = f._els[0];
     switch (f.kind) {
@@ -84,16 +197,26 @@
       case 'radio': return (f._els.find((r) => r.checked) || {}).value || '';
       case 'checkbox': return el.checked ? 'true' : 'false';
       case 'richtext': return clean(el.innerText);
+      case 'combo': return comboDisplay(el);
       default: return el.value || '';
     }
   }
 
-  function scan() {
+  async function scan() {
     registry.clear();
     const root = findRoot();
-    const cand = [...root.querySelectorAll(FIELD_SEL)]
+    let cand = [...root.querySelectorAll(FIELD_SEL)]
       .filter(isCandidate)
       .filter((el) => !(el.isContentEditable && el.parentElement && el.parentElement.isContentEditable));
+
+    // Custom dropdowns: drop their hidden native <select> / inner inputs so each shows once.
+    const combos = cand.filter(isComboLike);
+    const linkedSelects = new Map();
+    combos.forEach((c) => { const s = nearbySelect(c); if (s) linkedSelects.set(c, s); });
+    const linked = new Set(linkedSelects.values());
+    cand = cand.filter((el) => !linked.has(el))
+      .filter((el) => !(isComboLike(el) && el.tagName !== 'INPUT' && el.querySelector('input') && cand.includes(el.querySelector('input'))));
+
     const candSet = new Set(cand);
     const fields = [];
     const radios = new Map();
@@ -105,6 +228,7 @@
       let kind;
       if (tag === 'SELECT') kind = el.multiple ? 'multiselect' : 'select';
       else if (tag === 'TEXTAREA') kind = 'textarea';
+      else if (isComboLike(el)) kind = 'combo';
       else if (tag !== 'INPUT' && el.isContentEditable) kind = 'richtext';
       else if (el.type === 'radio') kind = 'radio';
       else if (el.type === 'checkbox') kind = 'checkbox';
@@ -124,8 +248,25 @@
       if (tag === 'SELECT') {
         f.options = [...el.options].filter((o) => !o.disabled).map((o) => ({ value: o.value, text: clean(o.text) }));
       }
+      if (kind === 'combo') {
+        const sel = linkedSelects.get(el);
+        if (sel) f._select = sel;
+        f.options = sel
+          ? [...sel.options].filter((o) => !o.disabled && clean(o.text)).map((o) => ({ value: clean(o.text), text: clean(o.text) }))
+          : [];
+      }
       fields.push(f);
       if (kind === 'radio' && el.name) radios.set(el.name, f);
+    }
+
+    // Read the options of custom dropdowns by briefly opening them.
+    for (const f of fields.filter((x) => x.kind === 'combo' && !x.options.length).slice(0, 30)) {
+      try {
+        const opts = await openWidget(f._els[0]);
+        f.options = opts.map((o) => ({ value: clean(o.innerText), text: clean(o.innerText) }));
+        await closeWidget(f._els[0]);
+      } catch (e) { /* ignore */ }
+      if (!f.options.length) { f.kind = 'text'; f.inputType = 'text'; } // free-text autocomplete
     }
 
     for (const f of fields) {
@@ -139,11 +280,12 @@
       url: location.href,
       title: document.title,
       scope: root === document.body ? 'page' : 'dialog',
-      fields: fields.map(({ _els, ...rest }) => rest),
+      fields: fields.map(({ _els, _select, ...rest }) => rest),
       pageText: (document.body.innerText || '').slice(0, 80000),
     };
   }
 
+  // ---------- fill ----------
   function setNativeValue(el, value) {
     const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype
       : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype
@@ -156,12 +298,16 @@
   function matchOption(options, v) {
     const s = String(v ?? '').trim().toLowerCase();
     if (!s) return null;
-    const lc = (x) => x.toLowerCase();
+    const lc = (x) => (x || '').toLowerCase();
+    const real = options.filter((o) => o.value !== '' || o.text);
+    const nonEmpty = options.filter((o) => o.value !== '' && o.text);
     return options.find((o) => lc(o.value) === s)
       || options.find((o) => lc(o.text) === s)
-      || options.find((o) => o.value && lc(o.text).startsWith(s))
-      || options.find((o) => o.value && o.text && s.startsWith(lc(o.text)))
-      || options.find((o) => o.value && lc(o.text).includes(s))
+      || real.find((o) => o.value && lc(o.text).startsWith(s))
+      || real.find((o) => o.text && s.startsWith(lc(o.text)))
+      // "3" on a 1–5 scale whose options are words (Minimal … Exceeding)
+      || (/^\d+$/.test(s) && nonEmpty[Number(s) - 1])
+      || real.find((o) => o.value && lc(o.text).includes(s))
       || null;
   }
 
@@ -175,13 +321,42 @@
     setTimeout(() => { t.style.outline = prev; t.style.outlineOffset = ''; }, 1500);
   }
 
-  function fillOne(f, value) {
+  async function fillCombo(f, value) {
+    const el = f._els[0];
+    const want = matchOption(f.options || [], value);
+    const wantText = want ? want.text : String(value);
+    const opts = await openWidget(el);
+    const pick = matchOption(opts.map((o, i) => ({ value: String(i), text: clean(o.innerText) })), wantText)
+      || matchOption(opts.map((o, i) => ({ value: String(i), text: clean(o.innerText) })), value);
+    if (pick) {
+      realClick(opts[Number(pick.value)]);
+      await sleep(150);
+      if (opts[Number(pick.value)].isConnected && isVisible(opts[Number(pick.value)])) await closeWidget(el);
+    } else {
+      await closeWidget(el);
+    }
+    // Hidden native select behind the widget: set it too so the form posts the value.
+    if (f._select) {
+      const so = matchOption([...f._select.options].map((o) => ({ value: o.value, text: clean(o.text) })), wantText);
+      if (so) setNativeValue(f._select, so.value);
+    }
+    if (comboDisplay(el).toLowerCase().includes(wantText.toLowerCase())) return null;
+    if (pick || f._select) return null; // clicked the option / set the native select
+    return `couldn't find "${wantText}" in the dropdown`;
+  }
+
+  async function fillOne(f, value) {
     const el = f._els[0];
     switch (f.kind) {
       case 'select': {
         const o = matchOption(f.options, value);
         if (!o) return `no option matches "${value}"`;
         setNativeValue(el, o.value);
+        break;
+      }
+      case 'combo': {
+        const err = await fillCombo(f, value);
+        if (err) return err;
         break;
       }
       case 'multiselect': {
@@ -220,17 +395,19 @@
     return null;
   }
 
-  function fill(values) {
-    return values.map(({ id, value }) => {
+  async function fill(values) {
+    const out = [];
+    for (const { id, value } of values) {
       const f = registry.get(id);
-      if (!f || !f._els[0].isConnected) return { id, ok: false, error: 'field not found — scan again' };
+      if (!f || !f._els[0].isConnected) { out.push({ id, ok: false, error: 'field not found — scan again' }); continue; }
       try {
-        const err = fillOne(f, value);
-        return { id, ok: !err, error: err || undefined };
+        const err = await fillOne(f, value);
+        out.push({ id, ok: !err, error: err || undefined });
       } catch (e) {
-        return { id, ok: false, error: e.message };
+        out.push({ id, ok: false, error: e.message });
       }
-    });
+    }
+    return out;
   }
 
   function focusField(id) {
@@ -241,12 +418,11 @@
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    try {
-      if (msg.type === 'fp:scan') sendResponse({ ok: true, data: scan() });
-      else if (msg.type === 'fp:fill') sendResponse({ ok: true, data: fill(msg.values || []) });
-      else if (msg.type === 'fp:focus') { focusField(msg.id); sendResponse({ ok: true }); }
-    } catch (e) {
-      sendResponse({ ok: false, error: e.message });
-    }
+    const reply = (p) => p.then((data) => sendResponse({ ok: true, data }))
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
+    if (msg.type === 'fp:scan') { reply(scan()); return true; }
+    if (msg.type === 'fp:fill') { reply(fill(msg.values || [])); return true; }
+    if (msg.type === 'fp:focus') { focusField(msg.id); sendResponse({ ok: true }); }
+    return false;
   });
 })();

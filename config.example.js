@@ -8,4 +8,5 @@ window.FORMPILOT_CONFIG = {
   model: 'claude-sonnet-5-5',   // or claude-opus-5-5 / claude-haiku-5-5
   mode: 'judge',                // default mode: fill | judge | check
   profile: '',                  // optional "About me" for Fill mode
+  autofill: true,               // fill the page right after Claude answers
 };

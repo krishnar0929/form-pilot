@@ -106,12 +106,13 @@ const LOCAL = window.FORMPILOT_CONFIG || {};
 if (/PASTE/.test(LOCAL.apiKey || '')) delete LOCAL.apiKey; // placeholder not replaced yet
 
 async function loadSettings() {
-  const s = await chrome.storage.local.get(['apiKey', 'model', 'profile', 'screenshot', 'mode']);
+  const s = await chrome.storage.local.get(['apiKey', 'model', 'profile', 'screenshot', 'mode', 'autofill']);
   const apiKey = s.apiKey || LOCAL.apiKey || '';
   $('#apiKey').value = apiKey;
   $('#model').value = s.model || LOCAL.model || DEFAULT_MODEL;
   $('#profile').value = s.profile || LOCAL.profile || '';
   $('#screenshot').checked = s.screenshot !== false;
+  $('#autofill').checked = s.autofill === true || (s.autofill === undefined && LOCAL.autofill === true);
   setMode(s.mode || LOCAL.mode || 'fill');
   // Persist the local key so it survives even if the config file is removed later.
   if (!s.apiKey && LOCAL.apiKey) saveSettings();
@@ -123,6 +124,7 @@ function saveSettings() {
     model: $('#model').value,
     profile: $('#profile').value,
     screenshot: $('#screenshot').checked,
+    autofill: $('#autofill').checked,
   });
 }
 function setMode(m) {
@@ -248,6 +250,11 @@ async function run() {
     $('#summary').textContent = out.summary || '';
     $('#summaryBox').classList.toggle('hidden', !out.summary);
     renderCards();
+    if ($('#autofill').checked) {
+      busy(false);
+      await fillSelected();
+      return;
+    }
     status('Review the suggestions, edit anything, then press “Fill selected”.');
   } catch (e) {
     status(e.message, true);
@@ -261,12 +268,13 @@ function pickOption(options, v) {
   const s = String(v ?? '').trim().toLowerCase();
   if (!s) return '';
   const o = options.find((x) => x.value.toLowerCase() === s) || options.find((x) => x.text.toLowerCase() === s)
-    || options.find((x) => x.value && x.text.toLowerCase().startsWith(s));
+    || options.find((x) => x.value && x.text.toLowerCase().startsWith(s))
+    || (/^\d+$/.test(s) ? options.filter((x) => x.value !== '' && x.text)[Number(s) - 1] : null);
   return o ? o.value : '';
 }
 
 function makeControl(f, value) {
-  if (f.kind === 'select' || f.kind === 'radio' || f.kind === 'checkbox') {
+  if (f.kind === 'select' || f.kind === 'combo' || f.kind === 'radio' || f.kind === 'checkbox') {
     const opts = f.kind === 'checkbox'
       ? [{ value: 'true', text: 'Checked' }, { value: 'false', text: 'Unchecked' }]
       : f.options;
@@ -356,7 +364,7 @@ async function copyText() {
 
 // ---------- wire up ----------
 document.querySelectorAll('.seg button').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
-['#apiKey', '#model', '#profile', '#screenshot'].forEach((s) => $(s).addEventListener('change', saveSettings));
+['#apiKey', '#model', '#profile', '#screenshot', '#autofill'].forEach((s) => $(s).addEventListener('change', saveSettings));
 $('#profile').addEventListener('input', saveSettings);
 $('#files').addEventListener('change', async (e) => {
   for (const file of e.target.files) {

@@ -22,6 +22,11 @@ Chrome extension that reads the form on the current page and uses Claude to **fi
 ## Test locally
 Open `test/review-form.html` in Chrome (enable "Allow access to file URLs" for the extension) and run Judge.
 
+## Auto-fill
+Tick **Auto-fill** in the panel (or set `autofill: true` in `config.local.js`) and FormPilot fills the page as soon as Claude answers. It still never submits — review the page and submit yourself.
+
+Custom dropdowns (styled pick-lists that aren't a native `<select>`) are supported: FormPilot opens them briefly to read the options and clicks the chosen one. Numeric scores ("4") map onto word scales (Minimal → Exceeding).
+
 ## Notes & limits
 - Your API key and profile are stored in `chrome.storage.local` and sent only to `api.anthropic.com`.
 - Fields inside iframes aren't scanned yet. Chrome pages and the Web Store can't be scripted.

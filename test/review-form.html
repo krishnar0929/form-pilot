@@ -62,6 +62,33 @@
         <textarea name="c3" placeholder="Write Comment"></textarea>
       </div>
     </div>
+
+    <div class="row">
+      <div class="left">
+        <h4>Usability &amp; Operational Readiness (custom dropdown)</h4>
+        <p>Assesses whether responders could realistically use the solution during an event.</p>
+      </div>
+      <div class="right">
+        <div class="vselect" style="position:relative">
+          <input class="vselect-input" placeholder="[]" readonly style="width:100%;cursor:pointer" />
+          <ul class="vselect-menu" style="display:none;position:absolute;left:0;right:0;background:#fff;border:1px solid #ccc;list-style:none;margin:0;padding:0;z-index:5">
+            <li>Minimal</li><li>Limited</li><li>Adequate</li><li>Strong</li><li>Exceeding</li>
+          </ul>
+        </div>
+        <div class="muted">Your Rating</div>
+        <textarea name="c4" placeholder="Write Comment"></textarea>
+      </div>
+    </div>
   </div>
+  <script>
+    document.querySelectorAll('.vselect').forEach(function (w) {
+      var input = w.querySelector('input'), menu = w.querySelector('ul');
+      input.addEventListener('click', function () { menu.style.display = menu.style.display === 'none' ? 'block' : 'none'; });
+      menu.querySelectorAll('li').forEach(function (li) {
+        li.addEventListener('mousedown', function () { input.value = li.textContent; menu.style.display = 'none'; });
+      });
+      input.addEventListener('keydown', function (e) { if (e.key === 'Escape') menu.style.display = 'none'; });
+    });
+  </script>
 </body>
 </html>

@@ -40,6 +40,7 @@ window.FORMPILOT_CONFIG = {
   model: 'claude-sonnet-5-5',
   mode: '$MODE',
   profile: '',
+  autofill: true,
 };
 EOF
 chmod 600 config.local.js
